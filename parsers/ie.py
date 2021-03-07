@@ -1,5 +1,5 @@
 import itertools
-from typing import Tuple
+from typing import Tuple, List
 
 from openie import StanfordOpenIE
 
@@ -31,7 +31,7 @@ class OpenIEParser(Parser):
 
         return dfas
 
-    def __clean(self, triples: list[list]) -> list[Tuple[str, str, str]]:
+    def __clean(self, triples: List[List]) -> List[Tuple[str, str, str]]:
         """
         Clean the given triples:
             - remove nested repetitions:

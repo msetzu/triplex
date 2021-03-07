@@ -15,7 +15,7 @@ import numpy
 import itertools
 from copy import copy
 
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Set
 
 from dfas import DFA, DFAH
 
@@ -33,7 +33,7 @@ class HypernymPerturbator:
         return WordnetAnnotator(HypernymPerturbator.nlp.lang)(HypernymPerturbator.nlp(text))
 
     @staticmethod
-    def nltk_hypernyms(text: str) -> Dict[str, set[str]]:
+    def nltk_hypernyms(text: str) -> Dict[str, Set[str]]:
         """
         Compute the NLTK hypernyms of the given `text`. Returns a list of pairs (token, hypernyms).
         Args:

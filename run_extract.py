@@ -8,6 +8,7 @@ import logzero
 
 import json
 import time
+import os
 
 from exceptions import ModelInferenceError
 
@@ -29,7 +30,7 @@ def to_standard_labels(labels, dataset):
     return None
 
 
-def extract(dataset: str, model: str, depth: int = 1, width: int = -1, max_perturbations: int = 5,
+def extract(dataset: str, model: str, depth: int = 1, width: int = -1, max_perturbations: int = -1,
             max_perturbations_per_token: int = 5, output: str = '', loglevel: str = 'info'):
     """
     Extract explanations for model `model` on data stored in `dataset`.
@@ -75,7 +76,14 @@ def extract(dataset: str, model: str, depth: int = 1, width: int = -1, max_pertu
     logzero.logger.info('Model: ' + model)
     logzero.logger.info('Output: ' + output_file)
 
-    i = 0
+    # check if the output file has already been partially created
+    if os.path.isfile(output_file + '.jsonl'):
+        with open(output_file + '.jsonl', 'r') as log:
+            skip_lines = len(log.readlines())
+        data = data.iloc[skip_lines:]
+        i = skip_lines
+    else:
+        i = 0
     for idx, row in data.iterrows():
         print(i)
         i += 1
@@ -83,17 +91,26 @@ def extract(dataset: str, model: str, depth: int = 1, width: int = -1, max_pertu
         try:
             # explainer
             gen = TripleX(transformer)
-            explanations = gen.extract(premise, hypothesis, depth=depth, width=width,
-                                       max_perturbations=max_perturbations,
-                                       max_perturbations_per_token=max_perturbations_per_token)
-            explanation_json = list()
-            for i, (perturbed_dfa, hypothesis, perturbation_distance, perturbation_pairs) in enumerate(explanations):
-                explanation_json.append([perturbed_dfa.to_json(), hypothesis, perturbation_distance,
-                                         list(map(list, perturbation_pairs))])
-            dump = [idx, premise, hypothesis, explanation_json]
+            explanations, counterfactual_explanations = gen.extract(premise, hypothesis, depth=depth, width=width,
+                                                                    max_perturbations=max_perturbations,
+                                                                    max_perturbations_per_token=max_perturbations_per_token)
+            explanation_json = {
+                'dataset': dataset.lower(),
+                'model': model,
+                'depth': depth,
+                'width': width,
+                'max_perturbations': max_perturbations,
+                'max_perturbations_per_token': max_perturbations_per_token,
+                'dataset_idx': i,
+                'premise': premise,
+                'hypothesis': hypothesis,
+                'explanations': [e.to_json() for e in explanations],
+                'counterfactual_explanations': [e.to_json() for e in counterfactual_explanations]
+            }
             logzero.logger.debug('Dumping to ' + output_file + '.jsonl')
             with open(output_file + '.jsonl', 'a+') as log:
-                json.dump(dump, log, indent=0)
+                json.dump(explanation_json, log)
+                log.write('\n')
         except ModelInferenceError:
             logzero.logger.info('Model could not infer.')
 

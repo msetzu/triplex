@@ -1,3 +1,4 @@
+from functools import reduce
 from typing import Union
 
 import fire
@@ -18,25 +19,23 @@ nlp = spacy.load("en_core_web_sm")
 
 
 def attention_highlights(model, tokenizer, premise: str, hypothesis: str, highlights_idxs: list):
-    """Compute attention scores of `model` on `text`, return rows and columns given by `highlight_idxs` ."""
+    """Compute attention scores of `model` on `text` on layer `layer`, return rows and columns given by `highlight_idxs` ."""
     x = tokenizer.encode_plus(premise, hypothesis, add_special_tokens=True, return_tensors='pt')
     attentions = model(x['input_ids'])[-1]
     # Remove first dimension for single prediction
     attentions = torch.cat(attentions, dim=0)
-    attentions = attentions[-1].detach().numpy()
-    # attention pairs on each head
-    highlighted_attentions = [attentions[:, highlights_idxs, :], attentions[:, :, highlights_idxs]]
+
+    highlighted_attentions = [attentions[layer].detach().numpy() for layer in range(attentions.size()[0])]
+    highlighted_attentions = [[layer, attentions[:, highlights_idxs, :], attentions[:, :, highlights_idxs]]
+                              for layer, attentions in enumerate(highlighted_attentions)]
 
     return highlighted_attentions
 
 
-def head_values(model: str = 'microsoft/deberta-base'):
+def head_values(model):
     null_highlights = {'{}'}
     esnli = pandas.read_csv(DATA_FOLDER + 'esnli_dev.csv')
-
-    model = AutoModel.from_pretrained(model, output_attentions=True)
     tokenizer = RobertaTokenizer.from_pretrained('roberta-large-mnli')
-    nr_heads = model.base_model.config.num_attention_heads
 
     highlights_per_annotation = list()
     for row in tqdm(esnli.itertuples(), total=esnli.shape[0]):
@@ -47,7 +46,7 @@ def head_values(model: str = 'microsoft/deberta-base'):
                             (row.Sentence1_marked_2, row.Sentence2_marked_2),
                             (row.Sentence1_marked_3, row.Sentence2_marked_3)]
 
-        for premise_highlight, hypothesis_highlight in annotations_idxs:
+        for annotation_idx, (premise_highlight, hypothesis_highlight) in enumerate(annotations_idxs):
             if premise_highlight in null_highlights or hypothesis_highlight in null_highlights:
                 continue
             else:
@@ -121,38 +120,53 @@ def head_values(model: str = 'microsoft/deberta-base'):
                             raise ValueError('No match for ' + h + ' in ' + str(tokens))
 
                 attention_vectors = attention_highlights(model, tokenizer, premise, hypothesis, highlight_tokenizer_idx)
-                highlights.append(attention_vectors)
+                for annotation_attention_vector in attention_vectors:
+                    highlights.append(annotation_attention_vector)
 
         highlights_per_annotation.append((premise, hypothesis, highlights) if len(highlights) > 0 else None)
 
-    return highlights_per_annotation, nr_heads
+    return highlights_per_annotation
 
 
-def head_rank(attention_vectors, nr_heads):
-    heads_scores = list()
-    for highlight in attention_vectors:
-        summary_vector = numpy.zeros(nr_heads,)
-        for row, col in highlight:
-            summary_vector += (row.reshape(col.shape) + col).mean(axis=(1, 2))
-        heads_scores.append(summary_vector / len(attention_vectors))
-    heads_scores = numpy.array(heads_scores)
-    heads_ranks = heads_scores.argsort(axis=1)
+def head_rank(attention_vectors, nr_heads: int, nr_layers: int):
+    alignments = list()
+    for sample in attention_vectors:
+        annotation_vectors = [sample[i * nr_heads: (i + 1) * nr_heads] for i in range(len(sample) // nr_layers)]
+        for annotation in annotation_vectors:
+            annotation_alignments = numpy.array([(layer_attentions[1].reshape(layer_attentions[2].shape) +
+                                                  layer_attentions[2]).mean(axis=(1, 2))
+                                                 for layer_attentions in annotation])
+            alignments.append(annotation_alignments.argsort(axis=None))
 
-    mean_ranks = heads_ranks.mean(axis=0).reshape(nr_heads, 1)
-    std_ranks = heads_ranks.std(axis=0).reshape(nr_heads, 1)
-    min_ranks = heads_ranks.sum(axis=0).argsort().reshape(nr_heads, 1)
-    median_ranks = numpy.median(heads_ranks, axis=0).reshape(nr_heads, 1)
-    ranks = numpy.concatenate([mean_ranks, std_ranks, min_ranks, median_ranks], axis=1)
-    ranks = DataFrame(ranks, columns=['mean_rank', 'std_ranks', 'min_rank', 'median_rank'])
+    alignments = numpy.array(alignments)
+    data = list()
+    for head in range(nr_layers * nr_heads):
+        head_ranks = numpy.where(alignments == head)[1]
+        mean_rank, std_rank = head_ranks.mean(), head_ranks.std()
+        layer_nr, head_nr = numpy.unravel_index(head, (nr_layers, nr_heads))
+        data.append((head, layer_nr.item(), head_nr.item(), mean_rank, std_rank))
+    data = sorted(data, key=lambda x: x[3])
+    order = list(range(nr_layers * nr_heads))
+
+    ranks = pandas.DataFrame(data, columns=['head_idx', 'layer', 'head', 'mean_rank', 'std_rank'])
+    ranks['rank'] = order
 
     return ranks
 
 
 def main(model: str = 'microsoft/deberta-base', out: Union[str, None] = None):
-    highlights, nr_heads = head_values(model)
-    rank_df = head_rank([h[2] for h in highlights if h is not None], nr_heads)
+    model_name = model
+    model = AutoModel.from_pretrained(model, output_attentions=True)
+    nr_heads = model.base_model.config.num_attention_heads
+    nr_layers = model.base_model.config.num_hidden_layers
+
+    highlights = head_values(model)
+    ranks = head_rank([h[2] for h in highlights if h is not None], nr_heads, nr_layers)
+
+    ranks['model_name'] = model_name
+    ranks = ranks[['model_name', 'layer', 'head', 'rank', 'mean_rank', 'std_rank', 'head_idx']]
     if out is not None:
-        rank_df.to_csv(out, index=False)
+        ranks.to_csv(out, index=False)
 
 
 if __name__ == '__main__':

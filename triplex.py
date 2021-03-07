@@ -144,14 +144,12 @@ class TripleX(TriplesGenerator):
             perturbations.append((perturbed_premise, perturbed_label, float(perturbation_distance)))
 
         logzero.logger.debug('Extracted, ranking perturbations...')
-        concordant_dfas = [(p, distance, perturbation_pairs)
-                           for (p, p_label, distance, perturbation_pairs) in perturbations if p_label == label]
-        discordant_dfas = [(p, distance, perturbation_pairs)
-                           for (p, p_label, distance, perturbation_pairs) in perturbations if p_label != label]
-        concordant_dfas = sorted(concordant_dfas, key=lambda x: x[2])
-        concordant_dfas = [dfa for dfa, _, _ in concordant_dfas]
-        discordant_dfas = sorted(discordant_dfas, key=lambda x: x[2])
-        discordant_dfas = [dfa for dfa, _, _ in discordant_dfas]
+        concordant_dfas = [(p, distance) for (p, p_label, distance) in perturbations if p_label == label]
+        discordant_dfas = [(p, distance) for (p, p_label, distance) in perturbations if p_label != label]
+        concordant_dfas = sorted(concordant_dfas, key=lambda x: x[1])
+        concordant_dfas = [dfa for dfa, _ in concordant_dfas]
+        discordant_dfas = sorted(discordant_dfas, key=lambda x: x[1])
+        discordant_dfas = [dfa for dfa, _ in discordant_dfas]
         logzero.logger.debug('Ranked.')
 
         return concordant_dfas, discordant_dfas

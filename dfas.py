@@ -196,7 +196,7 @@ class DFAH(DFA):
     def __str__(self):
         out = super().__str__()
         if self.perturbations is not None:
-            out += 'Perturbations:\n'
+            out += '\n--- Perturbations:'
             for original, perturbation in self.perturbations.items():
                 print('\t{0} => {1}'.format(original, perturbation))
 
