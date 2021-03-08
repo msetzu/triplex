@@ -8,6 +8,7 @@ __pycache__/
 venv/
 
 # Data
-./probings/*.csv
+probings/*.csv
+data/esnli/esnli_train*
 
 *.pt
