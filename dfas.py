@@ -11,7 +11,7 @@ class State:
         self.name = name
 
     def __str__(self):
-        return 'State [{0}]'.format(self.name)
+        return '[{0}]'.format(self.name)
 
     def __repr__(self):
         return str(self)
@@ -51,7 +51,7 @@ class Transition:
         self.transition = (self.destination, self.name, self.source)
 
     def __str__(self):
-        return '{0} --- {1} ---> {2}'.format(str(self.source), self.name, str(self.destination))
+        return '{0} --- {1} ---> {2}'.format(str(self.source.name), self.name, str(self.destination.name))
 
     def __repr__(self):
         return str(self)
@@ -68,13 +68,15 @@ class DFA:
     """
     A Deterministic Finite state Automaton for eXplanation.
     """
-    def __init__(self, triples: Union[List[Tuple[str, str, str]], Tuple[str, str, str]]):
+    def __init__(self, triples: Union[List[Tuple[str, str, str]], Tuple[str, str, str]], text: str = ''):
         """
         Create a DFAX from a (set of) tuples (state, transition, state)
         Args:
             triples: The triple(s) defining the transitions
+            text: Optional, the text that originated the DFA
         """
         self.triples_list = triples if isinstance(triples, list) else [triples]
+        self.text = None if len(text) == 0 else text
         states = [s for s, _, _ in self.triples_list] + [o for _, _, o in self.triples_list]
 
         # wrapped names
@@ -92,9 +94,11 @@ class DFA:
         self._states_names = states
 
     def __str__(self):
-        out = '--- States\n'
+        out = 'Originating text: ' + self.text + '\n' if self.text is not None else ''
+        out += '--- States\n'
+        out += '\t'
         for state in self.states:
-            out += '\t' + str(state) + ' | '
+            out += str(state) + ' | '
         out += '\n\n--- Transitions\n'
         for transition in self.transitions:
             out += '\t' + str(transition) + ' \n'
@@ -178,14 +182,15 @@ class DFAH(DFA):
     A Deterministic Finite state Automaton for eXplanation.
     """
     def __init__(self, triples: Union[List[Tuple[str, str, str]], Tuple[str, str, str]],
-                 perturbations: Union[None, dict, List[Tuple[str, str]]] = None):
+                 perturbations: Union[None, dict, List[Tuple[str, str]]] = None, text: str = ''):
         """
         Create a DFAX from a (set of) tuples (state, transition, state)
         Args:
             triples: The triple(s) defining the transitions
             perturbations: Perturbations applied to the states of this DFA, if any
+            text: Optional, the text that originated the DFA
         """
-        super().__init__(triples)
+        super().__init__(triples, text)
         if isinstance(perturbations, dict):
             self.perturbations = perturbations
         elif isinstance(perturbations, tuple):
