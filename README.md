@@ -48,8 +48,8 @@ model = AutoModel.from_pretrained(model, output_attentions=True)
 # create explainer
 explainer = TripleX(model)
 
-premise = ''
-hypothesis = ''
+premise = 'Dana Reeve, the widow of the actor Christopher Reeve, has died of lung cancer at age 44, according to the Christopher Reeve Foundation.'
+hypothesis = 'Christopher Reeve had an accident.'
 dfas, counterfactual_dfas = explainer.extract(premise, hypothesis,
                                               depth=2,
                                               max_perturbations_per_token=3)

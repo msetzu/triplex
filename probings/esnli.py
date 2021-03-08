@@ -1,4 +1,3 @@
-from functools import reduce
 from typing import Union
 
 import fire
@@ -11,7 +10,6 @@ import pathlib
 
 from transformers import AutoModel, RobertaTokenizer
 import torch
-from pandas import DataFrame
 
 
 DATA_FOLDER = str(pathlib.Path().absolute()) + '/../data/esnli/'

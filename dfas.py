@@ -95,7 +95,7 @@ class DFA:
         out = '--- States\n'
         for state in self.states:
             out += '\t' + str(state) + ' | '
-        out += '\n--- Transitions\n'
+        out += '\n\n--- Transitions\n'
         for transition in self.transitions:
             out += '\t' + str(transition) + ' \n'
 
@@ -196,9 +196,9 @@ class DFAH(DFA):
     def __str__(self):
         out = super().__str__()
         if self.perturbations is not None:
-            out += '\n--- Perturbations:'
+            out += '\n--- Perturbations:\n'
             for original, perturbation in self.perturbations.items():
-                print('\t{0} => {1}'.format(original, perturbation))
+                out += '\t{0} => {1}\n'.format(original, perturbation)
 
         return out
 

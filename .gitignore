@@ -10,5 +10,13 @@ venv/
 # Data
 probings/*.csv
 data/esnli/esnli_train*
+# too large for git
+data/explanations/mnli.jsonl
 
-*.pt
+# analysis
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IPython
+profile_default/
+ipython_config.py
