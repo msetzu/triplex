@@ -18,16 +18,16 @@ class Parser:
 
 
 class OpenIEParser(Parser):
-    def __init__(self):
+    def __init__(self, port: int = 9000):
         self.doc = spacy.load("en_core_web_sm")
+        self.information_extractor = StanfordOpenIE(endpoint='http://localhost:' + str(port))
 
     def parse(self, text: str) -> DFA:
-        with StanfordOpenIE() as information_extractor:
-            triples = information_extractor.annotate(text)
-            triples = [[triple['subject'], triple['relation'], triple['object']] for triple in triples]
+        triples = self.information_extractor.annotate(text)
+        triples = [[triple['subject'], triple['relation'], triple['object']] for triple in triples]
 
         cleaned_triples_set = self.__clean(triples)  # openie generates redundant and malformed triples
-        dfas = DFA(cleaned_triples_set)
+        dfas = DFA(cleaned_triples_set, text)
 
         return dfas
 
@@ -80,13 +80,15 @@ class OpenIEParser(Parser):
             s_doc_len, p_doc_len, o_doc_len = len(subject_doc), len(predicate_doc), len(object_doc)
             # lemmatize common nouns
             for t, token in enumerate(triple_doc):
-                if token.pos_ != 'PROPN':
-                    if t < s_doc_len:
-                        triples[i][0] = triples[i][0].replace(token.text, token.lemma_.lower())
-                    elif s_doc_len <= t < s_doc_len + p_doc_len:
-                        triples[i][1] = triples[i][1].replace(token.text, token.lemma_.lower())
-                    else:
-                        triples[i][2] = triples[i][2].replace(token.text, token.lemma_.lower())
+                # TODO: Check if no lemmatization improves
+                # if token.pos_ != 'PROPN':
+                #     if t < s_doc_len:
+                #         triples[i][0] = triples[i][0].replace(token.text, token.lemma_.lower())
+                #     elif s_doc_len <= t < s_doc_len + p_doc_len:
+                #         triples[i][1] = triples[i][1].replace(token.text, token.lemma_.lower())
+                #     else:
+                #         triples[i][2] = triples[i][2].replace(token.text, token.lemma_.lower())
+                # TODO
                 # remove adjectives, move them to new triples
                 if token.pos_ == 'ADJ':
                     head = token.head.text

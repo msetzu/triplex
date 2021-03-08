@@ -18,14 +18,14 @@ from perturbations import HypernymPerturbator
 class Observer:
     def __init__(self, model: AutoModelForSequenceClassification):
         self.model = model
+        self.tokenizer = RobertaTokenizer.from_pretrained('roberta-large-mnli')
 
     def attention(self, premise: str, hypothesis: Union[str, None] = None, use_stop_words: bool = False) -> Tuple[torch.Tensor, int]:
         """Compute attention scores of `model` on `s0, s1`."""
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-large-mnli')
-        x = tokenizer.encode_plus(premise, hypothesis, add_special_tokens=True, return_tensors='pt')
+        encoded_input = self.tokenizer.encode_plus(premise, hypothesis, add_special_tokens=True, return_tensors='pt')
         logzero.logger.debug('Model inference...')
         try:
-            label, attentions = self.model(x['input_ids'])[-2:]
+            label, attentions = self.model(encoded_input['input_ids'])[-2:]
         except IndexError:
             raise ModelInferenceError()
         logzero.logger.debug('Model inference done.')
@@ -39,13 +39,13 @@ class Observer:
             ignore_set = ignore_set.union(set(stopwords.words('english')))
             ignore_set = ignore_set.union(set(string.punctuation))
 
-            # Actual tokens
+        # Actual tokens
         if hypothesis is not None:
-            tokens = tokenizer.encode_plus(premise, hypothesis, add_special_tokens=True, return_tensors='pt')['input_ids'][0].numpy()
+            tokens = encoded_input['input_ids'][0].numpy()
         else:
-            tokens = tokenizer.encode_plus(premise, add_special_tokens=True, return_tensors='pt')['input_ids'][0].numpy()
-            tokens = [tokenizer.decode(int(i), skip_special_tokens=True,
-                                       clean_up_tokenization_spaces=False).replace(' ', '')
+            tokens = self.tokenizer.encode_plus(premise, add_special_tokens=True, return_tensors='pt')['input_ids'][0].numpy()
+            tokens = [self.tokenizer.decode(int(i), skip_special_tokens=True,
+                                            clean_up_tokenization_spaces=False).replace(' ', '')
                       for i in tokens]
 
         ignore_idx = {i for i, t in enumerate(tokens) if t in ignore_set}
@@ -73,11 +73,16 @@ class TripleX(TriplesGenerator):
     Use method `generate(inp: str) -> Set[Tuple(DFA, float)]` to get a set of candidate explanations
     in DFA form, each associated with an explanation score: the higher the score, the better the explanation.
     """
-    def __init__(self, model):
+    def __init__(self, model, port: int = 9000):
+        """
+        Args:
+            model: The HuggingFace Transformer model to use.
+            port: Port for the triplex server. Defaults to 9000
+        """
         self.model = model
         self.observer = Observer(model)
         self.perturbator = HypernymPerturbator()
-        self.parser = OpenIEParser()
+        self.parser = OpenIEParser(port=port)
 
     def extract(self, premise: str, hypothesis: str, **kwargs) -> Tuple[List[DFAH], List[DFAH]]:
         """

@@ -26,6 +26,7 @@ class HypernymPerturbator:
     For instance, 'cat' with 'feline' or 'living being'.
     """
     nlp = spacy.load('en_core_web_sm')
+    tokenizer = RobertaTokenizer.from_pretrained('roberta-large-mnli')
 
     @staticmethod
     def wordnet(text: str) -> spacy.tokens.doc.Doc:
@@ -33,11 +34,12 @@ class HypernymPerturbator:
         return WordnetAnnotator(HypernymPerturbator.nlp.lang)(HypernymPerturbator.nlp(text))
 
     @staticmethod
-    def nltk_hypernyms(text: str) -> Dict[str, Set[str]]:
+    def nltk_hypernyms(text: str, branching: int = 1) -> Dict[str, Set[str]]:
         """
         Compute the NLTK hypernyms of the given `text`. Returns a list of pairs (token, hypernyms).
         Args:
             text: The text to perturb.
+            branching: Number of top hypernyms to follow. Use -1 to select all synsets. Defaults to 1.
 
         Returns:
             Tokens hypernyms and indexes.
@@ -50,8 +52,9 @@ class HypernymPerturbator:
             hypernyms = set()
             synsets = w._.wordnet.synsets()
             if len(synsets) > 0:
-                for synset in synsets:
-                    for hyper in synset.hypernyms():
+                for synset in synsets[:branching if branching != -1 else len(synsets)]:
+                    synset_hypernyms = synset.hypernyms()
+                    for hyper in synset_hypernyms[:branching if branching != -1 else len(synset_hypernyms)]:
                         hypernyms.add(hyper.lemmas()[0].name())
                 token_hypernyms_dict[w.text] = hypernyms
 
@@ -86,10 +89,11 @@ class HypernymPerturbator:
         perturbations_per_token = max_perturbations_per_token if max_perturbations_per_token > 0 else numpy.inf
         distance = max_distance if max_distance > 0 else numpy.inf
 
+        text_no_predicate = dfa.to_text(index=(0, 2))
         text = dfa.to_text()
         text_doc = HypernymPerturbator.nlp(text)
         text_tokens = tuple(token.text for token in text_doc)
-        tokens_hypernyms = self.nltk_hypernyms(text)
+        tokens_hypernyms = self.nltk_hypernyms(text_no_predicate, branching=1)
 
         # depth dictionary: base tokens at depth 0, every hypernym has the depth
         # of its parent + 1
@@ -110,7 +114,7 @@ class HypernymPerturbator:
             for d in range(2, max_depth + 2):
                 for hypernym in boundary_set:
                     try:
-                        next_boundary_hypernyms_dic = self.nltk_hypernyms(hypernym)
+                        next_boundary_hypernyms_dic = self.nltk_hypernyms(hypernym, branching=1)
                         for next_boundary_hypernyms in next_boundary_hypernyms_dic.values():
                             for next_boundary_hypernym in next_boundary_hypernyms:
                                 hypernym_depth[token][next_boundary_hypernym] = depth
@@ -146,17 +150,17 @@ class HypernymPerturbator:
         # candidates generation
         flat_perturbations = list(flat_perturbations)
         perturbed_dfas = list()
-        sep, clause_sep = '~~~~~', '|||||'
+        sep, clause_sep = ' ~~~~~ ', ' ||||| '
         for perturbation_tuple in flat_perturbations:
             joined_triple = dfa.to_text(sep=sep, clause_sep=clause_sep)
             perturbation_dic = dict()
             for base_token, perturbation in zip(base_perturbation_tokens, perturbation_tuple):
-                perturbation_dic[base_token] = perturbation
+                perturbation_dic[base_token] = (perturbation, hypernym_depth[base_token][perturbation])
                 joined_triple = joined_triple.replace(base_token, perturbation)
             clauses = joined_triple.split(clause_sep)
             triples = [clause.split(sep) for clause in clauses]
             if len(perturbation_tuple) > 0:
-                perturbed_dfas.append(DFAH(triples, perturbation_dic))
+                perturbed_dfas.append(DFAH(triples, perturbation_dic, dfa.text))
 
         return perturbed_dfas
 
@@ -176,10 +180,10 @@ class HypernymPerturbator:
         Returns:
             An aligned matrix derived from compressing `misaligned` in the size of `base`.
         """
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-large-mnli')
-        perturbed_text = tokenizer.encode_plus(perturbed_premise, perturbed_hypothesis, add_special_tokens=True, return_tensors='pt')
-        perturbed_tokens = [tokenizer.decode(int(i), skip_special_tokens=True,
-                                             clean_up_tokenization_spaces=False).replace(' ', '')
+        perturbed_text = HypernymPerturbator.tokenizer.encode_plus(perturbed_premise, perturbed_hypothesis,
+                                                                   add_special_tokens=True, return_tensors='pt')
+        perturbed_tokens = [HypernymPerturbator.tokenizer.decode(int(i), skip_special_tokens=True,
+                                                                 clean_up_tokenization_spaces=False).replace(' ', '')
                             for i in perturbed_text['input_ids'][0].numpy()]
         perturbed_word_tokens = ['<s>'] + word_tokenize(perturbed_premise) + ['</s>', '</s>'] + \
                                 word_tokenize(perturbed_hypothesis) + ['</s>']

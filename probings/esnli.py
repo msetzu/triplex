@@ -155,6 +155,7 @@ def head_rank(attention_vectors, nr_heads: int, nr_layers: int):
 def main(model: str = 'microsoft/deberta-base', out: Union[str, None] = None):
     model_name = model
     model = AutoModel.from_pretrained(model, output_attentions=True)
+    model.training = False
     nr_heads = model.base_model.config.num_attention_heads
     nr_layers = model.base_model.config.num_hidden_layers
 

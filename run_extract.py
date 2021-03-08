@@ -1,4 +1,5 @@
 import fire as fire
+from tqdm import tqdm
 from transformers import AutoModelForSequenceClassification, AutoModel
 
 import numpy
@@ -31,7 +32,7 @@ def to_standard_labels(labels, dataset):
 
 
 def extract(dataset: str, model: str, depth: int = 1, width: int = -1, max_perturbations: int = -1,
-            max_perturbations_per_token: int = 5, output: str = '', loglevel: str = 'info'):
+            max_perturbations_per_token: int = 5, output: str = '', loglevel: str = 'info', port: int = 9000):
     """
     Extract explanations for model `model` on data stored in `dataset`.
     Args:
@@ -43,6 +44,7 @@ def extract(dataset: str, model: str, depth: int = 1, width: int = -1, max_pertu
         max_perturbations_per_token: Maximum number of perturbations per token.
         output: Output file where to dump the output.
         loglevel: Logging level, any of 'debug', 'info', 'error'.
+        port: Port for the triplex server. Defaults to 9000.
 
     Returns:
 
@@ -84,13 +86,12 @@ def extract(dataset: str, model: str, depth: int = 1, width: int = -1, max_pertu
         i = skip_lines
     else:
         i = 0
-    for idx, row in data.iterrows():
-        print(i)
+    for idx, row in tqdm(data.iloc[:2].iterrows(), total=data.shape[0]):
         i += 1
         premise, hypothesis, label = row.premise, row.hypothesis, row.label
         try:
             # explainer
-            gen = TripleX(transformer)
+            gen = TripleX(transformer, port=port)
             explanations, counterfactual_explanations = gen.extract(premise, hypothesis, depth=depth, width=width,
                                                                     max_perturbations=max_perturbations,
                                                                     max_perturbations_per_token=max_perturbations_per_token)

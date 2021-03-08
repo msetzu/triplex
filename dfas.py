@@ -68,7 +68,7 @@ class DFA:
     """
     A Deterministic Finite state Automaton for eXplanation.
     """
-    def __init__(self, triples: Union[List[Tuple[str, str, str]], Tuple[str, str, str]], text: str = ''):
+    def __init__(self, triples: Union[List[Tuple[str, str, str]], Tuple[str, str, str]], text: Union[str, None] = None):
         """
         Create a DFAX from a (set of) tuples (state, transition, state)
         Args:
@@ -76,7 +76,7 @@ class DFA:
             text: Optional, the text that originated the DFA
         """
         self.triples_list = triples if isinstance(triples, list) else [triples]
-        self.text = None if len(text) == 0 else text
+        self.text = text if isinstance(text, str) else None
         states = [s for s, _, _ in self.triples_list] + [o for _, _, o in self.triples_list]
 
         # wrapped names
@@ -163,18 +163,24 @@ class DFA:
                     dfas.append(dfa)
                 return dfas
 
-    def to_text(self, sep: str = ' ', clause_sep: str = '. ') -> str:
+    def to_text(self, sep: str = ' ', clause_sep: str = '. ', index: Union[None, tuple] = None) -> str:
         """
         Return a textual representation of this DFAX to feed a model.
         Joins single clauses of a triple with `sep`, then joins triples with `clause_sep`.
         Args:
             sep: The triple separator. Defaults to ' '
             clause_sep: The triples separator. Defaults to '. '
-
+            index: Use to return a text representation of a subset of this DFA. ('s', 'p', 'o')
+                is the full triple, ('s') only returns the subject, ('s', 'p') removes the object,
+                etc.
         Returns:
 
         """
-        return clause_sep.join(sep.join(triple) for triple in self.triples())
+        if index is None:
+            return clause_sep.join(sep.join(triple) for triple in self.triples())
+        else:
+            return clause_sep.join([sep.join([t for i, t in enumerate(triple) if i in index])
+                                    for triple in self.triples()])
 
 
 class DFAH(DFA):
