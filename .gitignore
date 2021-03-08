@@ -8,8 +8,6 @@ __pycache__/
 venv/
 
 # Data
-./probings/microsoft_deberta_heads.csv
-./data/local/
-./experiments/
+./probings/*.csv
 
 *.pt
