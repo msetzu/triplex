@@ -1,4 +1,4 @@
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Dict
 
 import json
 
@@ -68,12 +68,14 @@ class DFA:
     """
     A Deterministic Finite state Automaton for eXplanation.
     """
-    def __init__(self, triples: Union[List[Tuple[str, str, str]], Tuple[str, str, str]], text: Union[str, None] = None):
+    def __init__(self, triples: Union[List[Tuple[str, str, str]], Tuple[str, str, str]], text: Union[str, None] = None,
+                 alignment_weights: Union[Dict[int, float], None] = None):
         """
         Create a DFAX from a (set of) tuples (state, transition, state)
         Args:
             triples: The triple(s) defining the transitions
             text: Optional, the text that originated the DFA
+            alignment_weights: Optional, weight of each triple.
         """
         self.triples_list = triples if isinstance(triples, list) else [triples]
         self.text = text if isinstance(text, str) else None
@@ -93,6 +95,11 @@ class DFA:
         # names
         self._states_names = states
 
+        if alignment_weights is None:
+            self.alignment_weights = [-1] * len(triples)
+        else:
+            self.alignment_weights = alignment_weights
+
     def __str__(self):
         out = 'Originating text: ' + self.text + '\n' if self.text is not None else ''
         out += '--- States\n'
@@ -100,8 +107,11 @@ class DFA:
         for state in self.states:
             out += str(state) + ' | '
         out += '\n\n--- Transitions\n'
-        for transition in self.transitions:
-            out += '\t' + str(transition) + ' \n'
+        sorted_triples = sorted(list(enumerate(self.alignment_weights)), key=lambda x: x[1], reverse=True)
+        for triple_idx, weight in sorted_triples:
+            out += '\t(' + str(weight) + ') ' + str(Transition(State(self.triples_list[triple_idx][0]),
+                                                               self.triples_list[triple_idx][1],
+                                                               State(self.triples_list[triple_idx][2]))) + ' \n'
 
         return out
 
@@ -115,11 +125,12 @@ class DFA:
         if not isinstance(other, DFA):
             return False
 
-        return self.triples_list == other.triples_list and self.triples_list == other.triples_list
+        return self.triples_list == other.triples_list and self.triples_list == other.triples_list and\
+               self.text == other.text
 
     def __copy__(self):
         transitions = [(s.name, p.name, o.name) for s, p, o in self.transitions_dic]
-        return DFA(transitions)
+        return DFA(transitions, self.text)
 
     def triples(self) -> List[Tuple[str, str, str]]:
         """Return this DFA as a tuple (subject, predicate, object)"""
@@ -136,6 +147,8 @@ class DFA:
                   self.triples_dic[(s, p, o)][1].name,
                   self.triples_dic[(s, p, o)][2].name]
                  for (s, p, o) in self.triples_list],
+            'alignment_weights': self.alignment_weights,
+            'text': self.text
         }
 
     @staticmethod
@@ -145,7 +158,7 @@ class DFA:
         DFAX stored in a JSONL
         Args:
             json_file: Path to the file.
-            jsonl: True to read multiple DFAXs from a JSONL file, False otherwise.
+            jsonl: True to read multiple DFAs from a JSONL file, False otherwise.
                     Defaults to False.
 
         Returns:
@@ -153,13 +166,16 @@ class DFA:
         """
         with open(json_file, 'r') as log:
             if not jsonl:
-                triples = json.load(log)
-                return DFA([(str(s), str(p), str(o)) for [s, p, o] in triples])
+                dfa_json = json.load(log)
+                dfa = DFA([(str(s), str(p), str(o)) for [s, p, o] in dfa_json['triples']], dfa_json['text'],
+                          dfa_json.get('alignment_weights', None))
+                return dfa
             else:
                 dfas = list()
                 for line in log:
-                    triples = json.loads(line)
-                    dfa = DFA([(str(s), str(p), str(o)) for [s, p, o] in triples])
+                    dfa_json = json.loads(line)
+                    dfa = DFA([(str(s), str(p), str(o)) for [s, p, o] in dfa_json['triples']], dfa_json['text'],
+                              dfa_json.get('alignment_weights', None))
                     dfas.append(dfa)
                 return dfas
 
@@ -188,13 +204,15 @@ class DFAH(DFA):
     A Deterministic Finite state Automaton for eXplanation.
     """
     def __init__(self, triples: Union[List[Tuple[str, str, str]], Tuple[str, str, str]],
-                 perturbations: Union[None, dict, List[Tuple[str, str]]] = None, text: str = ''):
+                 perturbations: Union[None, dict, List[Tuple[str, str]]] = None, text: str = '',
+                 alignment_weights: Union[Dict[int, float], None] = None):
         """
         Create a DFAX from a (set of) tuples (state, transition, state)
         Args:
             triples: The triple(s) defining the transitions
             perturbations: Perturbations applied to the states of this DFA, if any
             text: Optional, the text that originated the DFA
+            alignment_weights: Optional, weight of each triple.
         """
         super().__init__(triples, text)
         if isinstance(perturbations, dict):
@@ -203,6 +221,11 @@ class DFAH(DFA):
             self.perturbations = dict(perturbations)
         elif perturbations is None:
             self.perturbations = dict()
+
+        if alignment_weights is None:
+            self.alignment_weights = [-1] * len(triples)
+        else:
+            self.alignment_weights = alignment_weights
 
     def __str__(self):
         out = super().__str__()
@@ -240,7 +263,9 @@ class DFAH(DFA):
                   self.triples_dic[(s, p, o)][1].name,
                   self.triples_dic[(s, p, o)][2].name]
                  for (s, p, o) in self.triples_list],
-            'perturbations': self.perturbations
+            'alignment_weights': self.alignment_weights,
+            'perturbations': {k: list(v) for k, v in self.perturbations.items()},
+            'text': self.text
         }
 
     @staticmethod
@@ -250,20 +275,25 @@ class DFAH(DFA):
         DFAX stored in a JSONL
         Args:
             json_file: Path to the file.
-            jsonl: True to read multiple DFAXs from a JSONL file, False otherwise.
+            jsonl: True to read multiple DFAHs from a JSONL file, False otherwise.
                     Defaults to False.
 
         Returns:
-            The read DFAX(s).
+            The read DFAH(s).
         """
         with open(json_file, 'r') as log:
             if not jsonl:
-                dfa = json.load(log)
-                return DFAH([(str(s), str(p), str(o)) for [s, p, o] in dfa['triples']], dfa.get('perturbations', dict()))
+                dfa_json = json.load(log)
+                dfa = DFAH([(str(s), str(p), str(o)) for [s, p, o] in dfa_json['triples']],
+                           dfa_json.get('perturbations', dict()), dfa_json['text'],
+                           dfa_json.get('alignment_weights', None))
+                return dfa
             else:
                 dfas = list()
                 for line in log:
-                    dfa = json.loads(line)
-                    dfa = DFAH([(str(s), str(p), str(o)) for [s, p, o] in dfa], dfa.get('perturbations', dict()))
+                    dfa_json = json.loads(line)
+                    dfa = DFAH([(str(s), str(p), str(o)) for [s, p, o] in dfa_json['triples']],
+                               dfa_json.get('perturbations', dict()), dfa_json['text'],
+                               dfa_json.get('alignment_weights', None))
                     dfas.append(dfa)
                 return dfas

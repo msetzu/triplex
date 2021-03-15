@@ -32,12 +32,12 @@ def attention_highlights(model, tokenizer, premise: str, hypothesis: str, highli
 
 def head_values(model):
     null_highlights = {'{}'}
-    esnli = pandas.read_csv(DATA_FOLDER + 'esnli_dev.csv')
+    esnli = pandas.read_csv(DATA_FOLDER + 'esnli_dev.csv').iloc[:100]
     tokenizer = RobertaTokenizer.from_pretrained('roberta-large-mnli')
 
     highlights_per_annotation = list()
     for row in tqdm(esnli.itertuples(), total=esnli.shape[0]):
-        highlights = list()
+        row_highlights = list()
         premise = row.Sentence1
         hypothesis = row.Sentence2
         annotations_idxs = [(row.Sentence1_marked_1, row.Sentence2_marked_1),
@@ -117,11 +117,13 @@ def head_values(model):
                             # match not found
                             raise ValueError('No match for ' + h + ' in ' + str(tokens))
 
+                # retrieve attention vectors for the highlights only  (highlight_tokenized_idx)
                 attention_vectors = attention_highlights(model, tokenizer, premise, hypothesis, highlight_tokenizer_idx)
                 for annotation_attention_vector in attention_vectors:
-                    highlights.append(annotation_attention_vector)
+                    row_highlights.append(annotation_attention_vector)
 
-        highlights_per_annotation.append((premise, hypothesis, highlights) if len(highlights) > 0 else None)
+        highlights_per_annotation.append((premise, hypothesis, row_highlights) if len(row_highlights) > 0
+                                         else (premise, hypothesis, None))
 
     return highlights_per_annotation
 
@@ -129,12 +131,12 @@ def head_values(model):
 def head_rank(attention_vectors, nr_heads: int, nr_layers: int):
     alignments = list()
     for sample in attention_vectors:
-        annotation_vectors = [sample[i * nr_heads: (i + 1) * nr_heads] for i in range(len(sample) // nr_layers)]
+        annotation_vectors = [sample[i * nr_layers: (i + 1) * nr_layers] for i in range(len(sample) // nr_layers)]
         for annotation in annotation_vectors:
             annotation_alignments = numpy.array([(layer_attentions[1].reshape(layer_attentions[2].shape) +
                                                   layer_attentions[2]).mean(axis=(1, 2))
                                                  for layer_attentions in annotation])
-            alignments.append(annotation_alignments.argsort(axis=None))
+            alignments.append(numpy.flip(annotation_alignments.argsort(axis=None)))
 
     alignments = numpy.array(alignments)
     data = list()
@@ -160,7 +162,8 @@ def main(model: str = 'microsoft/deberta-base', out: Union[str, None] = None):
     nr_layers = model.base_model.config.num_hidden_layers
 
     highlights = head_values(model)
-    ranks = head_rank([h[2] for h in highlights if h is not None], nr_heads, nr_layers)
+    ranks = head_rank([attention_vectors for premise, hypothesis, attention_vectors in highlights
+                       if attention_vectors is not None], nr_heads, nr_layers)
 
     ranks['model_name'] = model_name
     ranks = ranks[['model_name', 'layer', 'head', 'rank', 'mean_rank', 'std_rank', 'head_idx']]

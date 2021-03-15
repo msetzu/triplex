@@ -2,6 +2,7 @@
 Perturbations objects allowing to perturb textual input.
 """
 import random
+import warnings
 
 import spacy as spacy
 from spacy_wordnet.wordnet_annotator import WordnetAnnotator
@@ -152,6 +153,9 @@ class HypernymPerturbator:
         perturbed_dfas = list()
         sep, clause_sep = ' ~~~~~ ', ' ||||| '
         for perturbation_tuple in flat_perturbations:
+            # can't preemptively remove the base dfa
+            if base_perturbation_tokens == perturbation_tuple:
+                continue
             joined_triple = dfa.to_text(sep=sep, clause_sep=clause_sep)
             perturbation_dic = dict()
             for base_token, perturbation in zip(base_perturbation_tokens, perturbation_tuple):
@@ -208,8 +212,12 @@ class HypernymPerturbator:
         for group in merge_groups:
             if len(group) == 1:
                 continue
-            misaligned[group[0], :] = numpy.nanmean(misaligned[group, :], axis=0)
-            misaligned[:, group[0]] = numpy.nanmean(misaligned[:, group], axis=1)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', category=RuntimeWarning)
+                aggregated_rows = numpy.nanmean(misaligned[group, :], axis=0)
+                aggregated_cols = numpy.nanmean(misaligned[:, group], axis=1)
+            misaligned[group[0], :] = aggregated_rows
+            misaligned[:, group[0]] = aggregated_cols
             misaligned[group[1:], :] = numpy.nan
             misaligned[:, group[1:]] = numpy.nan
         for i in range(misaligned.shape[0]):
@@ -224,6 +232,6 @@ class HypernymPerturbator:
             else:
                 continue
         for k in range(aligned.shape[0]):
-            aligned[k, k] = numpy.nan
+            aligned[k, k] = 0.
 
         return aligned

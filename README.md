@@ -66,7 +66,7 @@ To run on a local JSONL dataset:
 from transformers import AutoModel
 import pandas as pd
 
-from run_extract import to_standard_labels
+from scripts.extract_from_dataset import to_standard_labels
 from triplex import TripleX
 
 dataset = 'path/to/dataset.jsonl'
