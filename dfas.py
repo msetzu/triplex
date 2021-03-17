@@ -101,8 +101,8 @@ class DFA:
             self.alignment_weights = alignment_weights
 
     def __str__(self):
-        out = 'Originating text: ' + self.text + '\n' if self.text is not None else ''
-        out += '--- States\n'
+        # out = 'Originating text: ' + self.text + '\n' if self.text is not None else ''
+        out = '--- States\n'
         out += '\t'
         for state in self.states:
             out += str(state) + ' | '
@@ -130,10 +130,13 @@ class DFA:
 
     def __copy__(self):
         transitions = [(s.name, p.name, o.name) for s, p, o in self.transitions_dic]
-        return DFA(transitions, self.text)
+        return DFA(transitions, self.text, alignment_weights=self.alignment_weights)
+
+    def __len__(self):
+        return len(self.triples_dic)
 
     def triples(self) -> List[Tuple[str, str, str]]:
-        """Return this DFA as a tuple (subject, predicate, object)"""
+        """Return this DFA as a tuple of strings (subject, predicate, object)"""
         return [(self.triples_dic[(s, p, o)][0].name,
                  self.triples_dic[(s, p, o)][1].name,
                  self.triples_dic[(s, p, o)][2].name)
@@ -205,7 +208,8 @@ class DFAH(DFA):
     """
     def __init__(self, triples: Union[List[Tuple[str, str, str]], Tuple[str, str, str]],
                  perturbations: Union[None, dict, List[Tuple[str, str]]] = None, text: str = '',
-                 alignment_weights: Union[Dict[int, float], None] = None):
+                 alignment_weights: Union[Dict[int, float], None] = None,
+                 perturbation_distance: Union[float, None] = None):
         """
         Create a DFAX from a (set of) tuples (state, transition, state)
         Args:
@@ -213,6 +217,7 @@ class DFAH(DFA):
             perturbations: Perturbations applied to the states of this DFA, if any
             text: Optional, the text that originated the DFA
             alignment_weights: Optional, weight of each triple.
+            perturbation_distance: Optional, a perturbation distance
         """
         super().__init__(triples, text)
         if isinstance(perturbations, dict):
@@ -226,6 +231,7 @@ class DFAH(DFA):
             self.alignment_weights = [-1] * len(triples)
         else:
             self.alignment_weights = alignment_weights
+        self.perturbation_distance = perturbation_distance
 
     def __str__(self):
         out = super().__str__()
@@ -233,6 +239,8 @@ class DFAH(DFA):
             out += '\n--- Perturbations:\n'
             for original, perturbation in self.perturbations.items():
                 out += '\t{0} => {1}\n'.format(original, perturbation)
+        out += '\n\nPerturbation distance:'
+        out += '\t' + str(self.perturbation_distance)
 
         return out
 
@@ -246,7 +254,8 @@ class DFAH(DFA):
     def __copy__(self):
         transitions = [(s.name, p.name, o.name) for s, p, o in self.transitions_dic]
         perturbations = self.perturbations
-        return DFAH(transitions, perturbations)
+        return DFAH(transitions, text=self.text, perturbations=perturbations,
+                    perturbation_distance=self.perturbation_distance)
 
     def triples(self) -> List[Tuple[str, str, str]]:
         """Return this DFA as a tuple (subject, predicate, object)"""
@@ -265,6 +274,7 @@ class DFAH(DFA):
                  for (s, p, o) in self.triples_list],
             'alignment_weights': self.alignment_weights,
             'perturbations': {k: list(v) for k, v in self.perturbations.items()},
+            'perturbation_distance': self.perturbation_distance,
             'text': self.text
         }
 
@@ -285,15 +295,17 @@ class DFAH(DFA):
             if not jsonl:
                 dfa_json = json.load(log)
                 dfa = DFAH([(str(s), str(p), str(o)) for [s, p, o] in dfa_json['triples']],
-                           dfa_json.get('perturbations', dict()), dfa_json['text'],
-                           dfa_json.get('alignment_weights', None))
+                           perturbations=dfa_json.get('perturbations', dict()), text=dfa_json['text'],
+                           alignment_weights=dfa_json.get('alignment_weights', None),
+                           perturbation_distance=dfa_json.get('perturbation_distance', None))
                 return dfa
             else:
                 dfas = list()
                 for line in log:
                     dfa_json = json.loads(line)
                     dfa = DFAH([(str(s), str(p), str(o)) for [s, p, o] in dfa_json['triples']],
-                               dfa_json.get('perturbations', dict()), dfa_json['text'],
-                               dfa_json.get('alignment_weights', None))
+                               perturbations=dfa_json.get('perturbations', dict()), text=dfa_json['text'],
+                               alignment_weights=dfa_json.get('alignment_weights', None),
+                               perturbation_distance=dfa_json.get('perturbation_distance', None))
                     dfas.append(dfa)
                 return dfas

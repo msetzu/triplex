@@ -3,15 +3,16 @@
 
 # python
 __pycache__/
+*/__pycache__/
 
 # Environment
 venv/
 
 # Data
-probings/*.csv
-data/esnli/esnli_train*
+data/probings/
+data/*/esnli_train*
 # too large for git
-data/explanations/mnli.jsonl
+data/explanations/
 
 # analysis
 .ipynb_checkpoints

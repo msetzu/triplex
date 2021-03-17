@@ -151,6 +151,7 @@ class HypernymPerturbator:
         # candidates generation
         flat_perturbations = list(flat_perturbations)
         perturbed_dfas = list()
+        perturbations = list()
         sep, clause_sep = ' ~~~~~ ', ' ||||| '
         for perturbation_tuple in flat_perturbations:
             # can't preemptively remove the base dfa
@@ -159,12 +160,17 @@ class HypernymPerturbator:
             joined_triple = dfa.to_text(sep=sep, clause_sep=clause_sep)
             perturbation_dic = dict()
             for base_token, perturbation in zip(base_perturbation_tokens, perturbation_tuple):
-                perturbation_dic[base_token] = (perturbation, hypernym_depth[base_token][perturbation])
+                depth = hypernym_depth[base_token][perturbation]
+                perturbation_dic[base_token] = (perturbation, depth)
                 joined_triple = joined_triple.replace(base_token, perturbation)
             clauses = joined_triple.split(clause_sep)
             triples = [clause.split(sep) for clause in clauses]
             if len(perturbation_tuple) > 0:
-                perturbed_dfas.append(DFAH(triples, perturbation_dic, dfa.text))
+                dfah = DFAH(triples, perturbation_dic, dfa.text)
+                perturbation_distance = self.perturbation_distance(base_perturbation_tokens, perturbation_tuple,
+                                                                   hypernym_depth)
+                dfah.perturbation_distance = perturbation_distance
+                perturbed_dfas.append(dfah)
 
         return perturbed_dfas
 

@@ -164,15 +164,15 @@ class TripleX(TriplesGenerator):
                 raise ModelInferenceError
             logzero.logger.debug('Attention gathered...')
             attention_graph = attention_graph[layer].detach().numpy()
-            # reference attention matrix to compute distances
+            # reference attention matrix to compute similarities
             attention_matrix = numpy.nanmean(attention_graph, axis=0) if head == -1 else attention_graph[head]
 
             # compute perturbations
             logzero.logger.debug('Perturbing...')
             perturbed_dfas = self.perturbator.perturb(dfa, max_width=width, max_depth=depth,
-                                                               max_distance=max_distance,
-                                                               max_perturbations_per_token=max_perturbations_per_token,
-                                                               max_perturbations=max_perturbations)
+                                                      max_distance=max_distance,
+                                                      max_perturbations_per_token=max_perturbations_per_token,
+                                                      max_perturbations=max_perturbations)
             logzero.logger.debug('Perturbed.')
 
             perturbations = list()
@@ -201,15 +201,16 @@ class TripleX(TriplesGenerator):
                                                                                            perturbed_premise.to_text(),
                                                                                            hypothesis)
 
-                perturbation_distance = self._attention_distance(attention_matrix, perturbed_attention_matrix, norm=norm)
-                perturbations.append((perturbed_premise, perturbed_label, float(perturbation_distance)))
+                attention_perturbation_distance = self._attention_distance(attention_matrix, perturbed_attention_matrix,
+                                                                           norm=norm)
+                perturbations.append((perturbed_premise, perturbed_label, float(attention_perturbation_distance)))
 
             logzero.logger.debug('Extracted, ranking perturbations...')
             concordant_dfas = [(p, distance) for (p, p_label, distance) in perturbations if p_label == label]
             discordant_dfas = [(p, distance) for (p, p_label, distance) in perturbations if p_label != label]
-            concordant_dfas = sorted(concordant_dfas, key=lambda x: x[1])
+            concordant_dfas = sorted(concordant_dfas, key=lambda x: x[1], reverse=True)
             concordant_dfas = [dfa for dfa, _ in concordant_dfas]
-            discordant_dfas = sorted(discordant_dfas, key=lambda x: x[1])
+            discordant_dfas = sorted(discordant_dfas, key=lambda x: x[1], reverse=True)
             discordant_dfas = [dfa for dfa, _ in discordant_dfas]
             logzero.logger.debug('Ranked.')
 
@@ -233,7 +234,7 @@ class TripleX(TriplesGenerator):
             D = A - B
             distance = scipy.linalg.norm(D, ord=norm)
         elif isinstance(norm, Callable):
-            # Hadamard-like distance, sum of pairwise distances
+            # Hadamard-like distance, sum of pairwise similarities
             distance = sum(norm(a, b) for a, b in zip(A.flatten(), B.flatten()))
         else:
             raise ValueError('norm of type ' + str(type(norm)) + ', expected str, int or'

@@ -50,12 +50,11 @@ def clean(triples: List[List]) -> List[Tuple[str, str, str]]:
     """
     cleaned_triples = list()
     current_triples = list()
-    lemmatization_dics = list()
     # remove triplets with any of these subjects
     banned_subjects = ['i', 'you', 'he', 'she', 'it', 'we', 'they']
 
     for i, (s, p, o) in enumerate(triples):
-        lemmatization_dics.append(dict())
+        lemmatization_dic = dict()
         triple_doc = DOC(' '.join([s, p, o]))
         subject_doc = DOC(triples[i][0])
         object_doc = DOC(triples[i][2])
@@ -78,17 +77,17 @@ def clean(triples: List[List]) -> List[Tuple[str, str, str]]:
                 #     triples[i][1] = triples[i][1].replace(token.text, token.lemma_.lower())
                 else:
                     triples[i][2] = triples[i][2].replace(token.text, token.lemma_.lower())
-                lemmatization_dics[-1][token.text] = token.lemma_.lower()
+                lemmatization_dic[token.text] = token.lemma_.lower()
             # remove adjectives, move them to new triples
-            if token.pos_ == 'ADJ':
+            # if token.pos_ == 'ADJ':
                 # additional_cleaned_triples.append((head, 'is', token.lemma_))
                 # remove from triple
-                if t < s_doc_len:
-                    triples[i][0] = triples[i][0].replace(token.text, '')
-                elif s_doc_len <= t < s_doc_len + p_doc_len:
-                    triples[i][1] = triples[i][1].replace(token.text, '')
-                else:
-                    triples[i][2] = triples[i][2].replace(token.text, '')
+                # if t < s_doc_len:
+                #     triples[i][0] = triples[i][0].replace(token.text, '')
+                # elif s_doc_len <= t < s_doc_len + p_doc_len:
+                #     triples[i][1] = triples[i][1].replace(token.text, '')
+                # else:
+                #     triples[i][2] = triples[i][2].replace(token.text, '')
             # move adverbs to new triples
             elif token.pos_ == 'ADV':
                 if t < s_doc_len:
@@ -132,7 +131,8 @@ def clean(triples: List[List]) -> List[Tuple[str, str, str]]:
 
         current_triples.append([re.sub(' {2,}', ' ', triples[i][0]).strip(),
                                 re.sub(' {2,}', ' ', triples[i][1]).strip(),
-                                re.sub(' {2,}', ' ', triples[i][2]).strip()])
+                                re.sub(' {2,}', ' ', triples[i][2]).strip(),
+                                lemmatization_dic])
 
     # remove nested repetitions by picking the largest encompassing
     # first grouping: by predicate
@@ -146,12 +146,13 @@ def clean(triples: List[List]) -> List[Tuple[str, str, str]]:
             current_triples.append(predicate_group[0])
             continue
 
-        subjects = [DOC(s) for s, _, _ in predicate_group]
-        objects = [DOC(o) for _, _, o in predicate_group]
+        subjects = [DOC(s) for s, _, _, _ in predicate_group]
+        objects = [DOC(o) for _, _, o, _ in predicate_group]
+        lemmatization_dic = [d for _, _, _, d in predicate_group]
         shortest_object_prefix_len = min(len(o) for o in objects)
         shortest_subject_suffix_len = min(len(s) for s in subjects)
         grouping_anchors = [(s[-shortest_subject_suffix_len:].text + '~~~' + o[:shortest_object_prefix_len].text,
-                             s.text, o.text) for s, o in zip(subjects, objects)]
+                             s.text, o.text, d) for s, o, d in zip(subjects, objects, lemmatization_dic)]
         grouping_anchors = sorted(grouping_anchors, key=lambda x: x[0])
         groups = itertools.groupby(grouping_anchors, lambda x: x[0])
         groups = [list(group) for _, group in groups]
@@ -159,13 +160,13 @@ def clean(triples: List[List]) -> List[Tuple[str, str, str]]:
         # add only largest triple from each group
         for group in groups:
             group_anchor = max(group, key=lambda x: len(x[1].split(' ')) + len(x[2].split(' ')))
-            current_triples.append([group_anchor[1], predicate, group_anchor[2]])
+            current_triples.append([group_anchor[1], predicate, group_anchor[2], group_anchor[3]])
 
     # some object groups miss starting tokens
     n = len(current_triples)
     current_triples_buffer = list()
     for i in range(n):
-        subj, pred, obj = current_triples[i]
+        subj, pred, obj, d = current_triples[i]
         subset_index = [obj in other_triple[2] and subj in other_triple[0] and pred == other_triple[1]
                         if i != j else False for j, other_triple in enumerate(current_triples)]
         # this triple is not subset of any another, preserve it
@@ -173,17 +174,17 @@ def clean(triples: List[List]) -> List[Tuple[str, str, str]]:
             current_triples_buffer.append(current_triples[i])
 
     # make tuples out of lists
-    for s, p, o in current_triples_buffer:
+    for s, p, o, d in current_triples_buffer:
         if len(s) > 0 and len(p) > 0 and len(o) > 0:
             if s.strip() not in banned_subjects:
-                cleaned_triples.append([s.strip(), p.strip(), o.strip()])
+                cleaned_triples.append([s.strip(), p.strip(), o.strip(), d])
 
-    cleaned_triples = list(zip(cleaned_triples, lemmatization_dics))
     for i in range(len(cleaned_triples)):
-        for lemmatized, original in cleaned_triples[i][1].items():
-            cleaned_triples[i][0][0] = cleaned_triples[i][0][0].replace(lemmatized, original)
-            cleaned_triples[i][0][1] = cleaned_triples[i][0][1].replace(lemmatized, original)
-            cleaned_triples[i][0][2] = cleaned_triples[i][0][2].replace(lemmatized, original)
-    cleaned_triples = [tuple(c) for c, _ in cleaned_triples]
+        lemmatization_dic = cleaned_triples[i][3]
+        for original, lemmatized in lemmatization_dic.items():
+            cleaned_triples[i][0] = cleaned_triples[i][0].replace(lemmatized, original)
+            # cleaned_triples[i][1] = cleaned_triples[i][1].replace(lemmatized, original)
+            cleaned_triples[i][2] = cleaned_triples[i][2].replace(lemmatized, original)
+    cleaned_triples = [tuple([s, p, o]) for s, p, o, _ in cleaned_triples]
 
     return cleaned_triples
