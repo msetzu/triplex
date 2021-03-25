@@ -8,15 +8,25 @@ __pycache__/
 # Environment
 venv/
 
+# modules
+similarities_modules/
+
 # Data
 data/probings/
 data/*/esnli_train*
+probings/*.csv
+*.html
+scripts/*.jsonl
 # too large for git
+data/models/
 data/explanations/
+data/local/
+*.dat
 
 # analysis
 .ipynb_checkpoints
 notebooks/.ipynb_checkpoints/*
+notebooks/*.png
 
 # IPython
 profile_default/
